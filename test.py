@@ -118,7 +118,7 @@ def main():
     print(f'Mean IoU: {avg_iou:.4f} ± {std_iou:.4f}')
 
     # Save metrics to a text file
-    metrics_filepath = os.path.join(output_dir, 'metrics.txt')
+    metrics_filepath = os.path.join(output_dir.split('/')[:-1], 'metrics.txt')
     with open(metrics_filepath, 'w') as file:
         file.write(f'Test Loss: {avg_loss:.4f}\n')
         file.write(f'Precision: {avg_precision:.4f} ± {std_precision:.4f}\n')

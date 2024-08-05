@@ -73,6 +73,8 @@ def main():
     min_valid_loss = float('inf')
     
     # CSV logging setup
+    if not os.path.exists(f'checkpoints/{args.resolution}_{args.scenario}'):
+                os.makedirs(f'checkpoints/{args.resolution}_{args.scenario}')
     csv_file = f'checkpoints/{args.resolution}_{args.scenario}/training_metrics.csv'
     if not os.path.exists(csv_file):
         with open(csv_file, mode='w', newline='') as file:

@@ -92,10 +92,10 @@ def main():
 
             # Save segmentation as NIfTI
             
-            output_dir = os.path.join(f'checkpoints/{args.resolution}_{args.scenario}','seg_results')
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            save_nifti(target_np[0], os.path.join(output_dir, f'segment_{i}.nii.gz'), affine)
+            output_dir = f'checkpoints/{args.resolution}_{args.scenario}'
+            if not os.path.exists(os.path.join(output_dir, 'seg_results')):
+                os.makedirs(os.path.join(output_dir, 'seg_results'))
+            save_nifti(target_np[0], os.path.join(os.path.join(output_dir, 'seg_results'), f'segment_{i}.nii.gz'), affine)
 
     avg_loss = total_loss / len(test_dataloader)
     avg_precision = np.mean(all_precision)
@@ -118,7 +118,7 @@ def main():
     print(f'Mean IoU: {avg_iou:.4f} ± {std_iou:.4f}')
 
     # Save metrics to a text file
-    metrics_filepath = os.path.join(output_dir.split('/')[:-1], 'metrics.txt')
+    metrics_filepath = os.path.join(output_dir, 'metrics.txt')
     with open(metrics_filepath, 'w') as file:
         file.write(f'Test Loss: {avg_loss:.4f}\n')
         file.write(f'Precision: {avg_precision:.4f} ± {std_precision:.4f}\n')

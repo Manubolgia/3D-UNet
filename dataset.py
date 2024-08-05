@@ -96,25 +96,25 @@ class MedicalImageDataset(Dataset):
             tuple: Augmented image and label.
         """
         # Random flip along each axis
-        if random.random() > 0.2:
+        if random.random() > 0.3:
             image = np.flip(image, axis=1)  # Flip depth
             label = np.flip(label, axis=1)
-        if random.random() > 0.2:
+        if random.random() > 0.3:
             image = np.flip(image, axis=2)  # Flip height
             label = np.flip(label, axis=2)
-        if random.random() > 0.2:
+        if random.random() > 0.3:
             image = np.flip(image, axis=3)  # Flip width
             label = np.flip(label, axis=3)
 
         # Random rotation
-        if random.random() > 0.2:
+        if random.random() > 0.3:
             # Rotate the image slightly (e.g., by ±10 degrees)
             angle = random.uniform(-10, 10)
             image = self.rotate_volume(image, angle)
             label = self.rotate_volume(label, angle, is_label=True)
 
         # Random intensity adjustment
-        if random.random() > 0.2:
+        if random.random() > 0.3:
             factor = random.uniform(0.9, 1.1)
             image *= factor
 

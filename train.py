@@ -24,7 +24,8 @@ def parse_args():
     parser.add_argument('--train_cuda', action='store_true', help='Use CUDA for training if available')
     parser.add_argument('--bce_weights', type=float, nargs='+', default=[0.004, 0.996], help='Weights for binary cross-entropy loss')
     parser.add_argument('--scenario', type=str, default='1', choices=['1','2','3','4'], help='Scenario to train the model on')
-    
+    parser.add_argument('--patience', type=int, default=10, help='Early stopping patience')
+
     return parser.parse_args()
 
 def setup_dist():
@@ -89,6 +90,7 @@ def main():
     setup_logging(log_file)
 
     min_valid_loss = float('inf')
+    no_improve_epochs = 0
     
     # CSV logging setup
     csv_file = os.path.join(results_dir, 'training_metrics.csv')
@@ -175,13 +177,22 @@ def main():
             writer = csv.writer(file)
             writer.writerow([epoch+1, avg_train_loss, avg_valid_loss, avg_precision, avg_recall, avg_dice, avg_iou])
 
-        if min_valid_loss > avg_valid_loss:
+        # Early stopping logic
+        if avg_valid_loss < min_valid_loss:
             logging.info(f'Validation Loss Decreased({min_valid_loss:.6f}--->{avg_valid_loss:.6f}) \t Saving The Model')
             min_valid_loss = avg_valid_loss
+            no_improve_epochs = 0
             checkpoints_dir = os.path.join(results_dir, 'checkpoints')
             if not os.path.exists(checkpoints_dir):
                 os.makedirs(checkpoints_dir)
             torch.save(model.state_dict(), os.path.join(checkpoints_dir, f'epoch{epoch}_valLoss{min_valid_loss:.6f}.pth'))
+        else:
+            no_improve_epochs += 1
+            logging.info(f'No improvement in validation loss for {no_improve_epochs} epochs.')
+
+        if no_improve_epochs >= args.patience:
+            logging.info(f'Early stopping triggered after {no_improve_epochs} epochs without improvement.')
+            break
 
 if __name__ == '__main__':
     main()

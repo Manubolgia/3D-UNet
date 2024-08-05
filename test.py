@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('--test_batch_size', type=int, default=1, help='Batch size for testing')
     parser.add_argument('--train_cuda', action='store_true', help='Use CUDA for testing if available')
     parser.add_argument('--model_path', type=str, required=True, help='Path to the trained model checkpoint')
+    parser.add_argument('--scenario', type=str, default='1', choices=['1','2','3','4'], help='Scenario to test the model on')
 
     return parser.parse_args()
 
@@ -53,9 +54,6 @@ def main():
         resolution=args.resolution,
         test_batch_size=args.test_batch_size,
     )
-
-    if not os.path.exists('results'):
-        os.makedirs('results')
 
     total_loss = 0.0
     criterion = CrossEntropyLoss()
@@ -93,8 +91,11 @@ def main():
             all_iou.append(iou)
 
             # Save segmentation as NIfTI
-            output_dir = f'checkpoints/{args.resolution}_{args.scenario}'
-            save_nifti(target_np[0], os.path.join(output_dir, f'seg_results/segment_{i}.nii.gz'), affine)
+            
+            output_dir = os.path.join(f'checkpoints/{args.resolution}_{args.scenario}','seg_results')
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            save_nifti(target_np[0], os.path.join(output_dir, f'segment_{i}.nii.gz'), affine)
 
     avg_loss = total_loss / len(test_dataloader)
     avg_precision = np.mean(all_precision)

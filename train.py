@@ -37,6 +37,20 @@ def setup_dist():
     else:
         raise RuntimeError("CUDA is not available. A GPU is required for this setup.")
 
+def calculate_class_weights(dataloader, num_classes):
+    class_counts = torch.zeros(num_classes)
+    
+    for batch in dataloader:
+        _, labels, _ = batch['image'], batch['label'], batch['affine']
+        for label in labels:
+            unique, counts = torch.unique(label, return_counts=True)
+            class_counts[unique.long()] += counts
+
+    total_counts = class_counts.sum()
+    class_weights = total_counts / (num_classes * class_counts)
+    
+    return class_weights
+
 def preprocess_input(data, num_classes):
     # move to GPU and change data types
     data = data.long()
@@ -76,8 +90,17 @@ def main():
         test_batch_size=args.test_batch_size,
         scenario=args.scenario
     )
+    # Compute class weights based on the training data
+    class_weights = calculate_class_weights(train_dataloader, args.num_classes)
 
-    criterion = CrossEntropyLoss()#weight=torch.Tensor(args.bce_weights)
+    # Convert class weights to a tensor and move to GPU if necessary
+    class_weights = torch.FloatTensor(class_weights)
+    if args.train_cuda and torch.cuda.is_available():
+        class_weights = class_weights.cuda()
+
+    # Define the loss function with class weights
+    criterion = CrossEntropyLoss(weight=class_weights)
+    
     if args.train_cuda and torch.cuda.is_available():
         criterion = criterion.cuda()
     optimizer = Adam(params=model.parameters())

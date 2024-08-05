@@ -73,7 +73,7 @@ def main():
     min_valid_loss = float('inf')
     
     # CSV logging setup
-    csv_file = 'training_metrics.csv'
+    csv_file = f'checkpoints/{args.resolution}_{args.scenario}/training_metrics.csv'
     if not os.path.exists(csv_file):
         with open(csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -149,9 +149,9 @@ def main():
         if min_valid_loss > valid_loss:
             print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
             min_valid_loss = valid_loss
-            if not os.path.exists('checkpoints'):
-                os.makedirs('checkpoints')
-            torch.save(model.state_dict(), f'checkpoints/epoch{epoch}_valLoss{min_valid_loss:.6f}.pth')
+            if not os.path.exists(f'checkpoints/{args.resolution}_{args.scenario}'):
+                os.makedirs(f'checkpoints/{args.resolution}_{args.scenario}')
+            torch.save(model.state_dict(), f'checkpoints/{args.resolution}_{args.scenario}/epoch{epoch}_valLoss{min_valid_loss:.6f}.pth')
 
 if __name__ == '__main__':
     main()

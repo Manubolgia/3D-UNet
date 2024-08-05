@@ -93,7 +93,8 @@ def main():
             all_iou.append(iou)
 
             # Save segmentation as NIfTI
-            save_nifti(target_np[0], os.path.join('results', f'segment_{i}.nii.gz'), affine)
+            output_dir = f'checkpoints/{args.resolution}_{args.scenario}/seg_results'
+            save_nifti(target_np[0], os.path.join(output_dir, f'segment_{i}.nii.gz'), affine)
 
     avg_loss = total_loss / len(test_dataloader)
     avg_precision = np.mean(all_precision)

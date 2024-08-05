@@ -92,7 +92,7 @@ def main():
 
             # Save segmentation as NIfTI
             
-            output_dir = f'checkpoints/{args.resolution}_{args.scenario}'
+            output_dir = f'Results/{args.resolution}_{args.scenario}'
             if not os.path.exists(os.path.join(output_dir, 'seg_results')):
                 os.makedirs(os.path.join(output_dir, 'seg_results'))
             save_nifti(target_np[0], os.path.join(os.path.join(output_dir, 'seg_results'), f'segment_{i}.nii.gz'), affine)

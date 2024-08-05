@@ -146,8 +146,8 @@ def main():
 
             train_loss += loss.item()
 
-            if batch_idx % 10 == 0:  # Log every 10 batches
-                logging.info(f'Epoch {epoch+1}, Batch {batch_idx}, Loss: {loss.item()}')
+            #if batch_idx % 10 == 0:  # Log every 10 batches
+            #    logging.info(f'Epoch {epoch+1}, Batch {batch_idx}, Loss: {loss.item()}')
 
         valid_loss = 0.0
         all_precision, all_recall, all_dice, all_iou = [], [], [], []
@@ -180,8 +180,8 @@ def main():
                 all_dice.append(dice)
                 all_iou.append(iou)
 
-                if batch_idx % 10 == 0:  # Log every 10 batches
-                    logging.info(f'Epoch {epoch+1}, Validation Batch {batch_idx}, Loss: {loss.item()}')
+                #if batch_idx % 10 == 0:  # Log every 10 batches
+                #    logging.info(f'Epoch {epoch+1}, Validation Batch {batch_idx}, Loss: {loss.item()}')
 
         avg_train_loss = train_loss / len(train_dataloader)
         avg_valid_loss = valid_loss / len(val_dataloader)

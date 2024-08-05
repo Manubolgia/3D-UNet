@@ -100,7 +100,7 @@ class UNet3D(nn.Module):
     :return -> Tensor
     """
     
-    def __init__(self, in_channels, num_classes, level_channels=[64, 128, 256], bottleneck_channel=512) -> None:
+    def __init__(self, in_channels, num_classes, level_channels=[64, 128, 256], bottleneck_channel=256) -> None:
         super(UNet3D, self).__init__()
         level_1_chnls, level_2_chnls, level_3_chnls = level_channels[0], level_channels[1], level_channels[2]
         self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=level_1_chnls)

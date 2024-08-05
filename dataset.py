@@ -1,148 +1,153 @@
-import copy
+import os
 import nibabel as nib
 import numpy as np
-import os
-import tarfile
-import json
-from sklearn.utils import shuffle
-from torch.utils.data import Dataset, DataLoader
 import torch
-from torch.utils.data import random_split
-from config import (
-    DATASET_PATH, TASK_ID, TRAIN_VAL_TEST_SPLIT,
-    TRAIN_BATCH_SIZE, VAL_BATCH_SIZE, TEST_BATCH_SIZE
-)
+from torch.utils.data import Dataset, DataLoader
+import random
+from scipy.ndimage import rotate
 
-#Utility function to extract .tar file formats into ./Datasets directory
-def ExtractTar(Directory):
-        try:
-            print("Extracting tar file ...")
-            tarfile.open(Directory).extractall('./Datasets')
-        except:
-            raise "File extraction failed!"
-        print("Extraction completed!")
-        return 
-
-
-#The dict representing segmentation tasks along with their IDs
-task_names = {
-    "01": "BrainTumour",
-    "02": "Heart",
-    "03": "Liver",
-    "04": "Hippocampus",
-    "05": "Prostate",
-    "06": "Lung",
-    "07": "Pancreas",
-    "08": "HepaticVessel",
-    "09": "Spleen",
-    "10": "Colon"
-}
-
-
-class MedicalSegmentationDecathlon(Dataset):
-    """
-    The base dataset class for Decathlon segmentation tasks
-    -- __init__()
-    :param task_number -> represent the organ dataset ID (see task_names above for hints)
-    :param dir_path -> the dataset directory path to .tar files
-    :param transform -> optional - transforms to be applied on each instance
-    """
-    def __init__(self, task_number, dir_path, split_ratios = [0.8, 0.1, 0.1], transforms = None, mode = None) -> None:
-        super(MedicalSegmentationDecathlon, self).__init__()
-        #Rectify the task ID representaion
-        self.task_number = str(task_number)
-        if len(self.task_number) == 1:
-            self.task_number = "0" + self.task_number
-        #Building the file name according to task ID
-        self.file_name = f"Task{self.task_number}_{task_names[self.task_number]}"
-        #Extracting .tar file
-        if not os.path.exists(os.path.join(os.getcwd(), "Datasets", self.file_name)):
-            ExtractTar(os.path.join(dir_path, f"{self.file_name}.tar"))
-        #Path to extracted dataset
-        self.dir = os.path.join(os.getcwd(), "Datasets", self.file_name)
-        #Meta data about the dataset
-        self.meta = json.load(open(os.path.join(self.dir, "dataset.json")))
-        self.splits = split_ratios
-        self.transform = transforms
-        #Calculating split number of images
-        num_training_imgs =  self.meta["numTraining"]
-        train_val_test = [int(x * num_training_imgs) for x in split_ratios]
-        if(sum(train_val_test) != num_training_imgs): train_val_test[0] += (num_training_imgs - sum(train_val_test))
-        train_val_test = [x for x in train_val_test if x!=0]
-        # train_val_test = [(x-1) for x in train_val_test]
+class MedicalImageDataset(Dataset):
+    def __init__(self, data_dir, mode, resolution, scenario='1'):
+        """
+        Args:
+            data_dir (string): Directory with all the images.
+            mode (string): One of 'train', 'val', or 'test'.
+            resolution (int): Resolution of images, either 64 or 128.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.data_dir = data_dir
         self.mode = mode
-        #Spliting dataset
-        samples = self.meta["training"]
-        shuffle(samples)
-        self.train = samples[0:train_val_test[0]]
-        self.val = samples[train_val_test[0]:train_val_test[0] + train_val_test[1]]
-        self.test = samples[train_val_test[1]:train_val_test[1] + train_val_test[2]]
+        self.resolution = resolution
+        self.scenario = scenario
 
-    def set_mode(self, mode):
-        self.mode = mode
+        # Construct paths based on resolution and mode
+        if scenario not in ['1', '2', '3', '4']:
+            raise ValueError("Invalid scenario. Choose from '1', '2', '3', or '4'.")
+        if self.scenario == '2':
+            scenario = '1'
+
+        if self.mode == 'train':
+            self.cta_path = os.path.join(data_dir, f"training_{scenario}_{resolution}", "cta")
+            self.annotation_path = os.path.join(data_dir, f"training_{scenario}_{resolution}", "annotation")
+
+        elif self.mode == 'val':
+            self.cta_path = os.path.join(data_dir, f"validation_{resolution}", "cta")
+            self.annotation_path = os.path.join(data_dir, f"validation_{resolution}", "annotation")
+        else:
+            self.cta_path = os.path.join(data_dir, f"test_{resolution}", "cta")
+            self.annotation_path = os.path.join(data_dir, f"test_{resolution}", "annotation")
+
+        # List all files in the directory
+        self.samples = [f for f in os.listdir(self.cta_path) if f.endswith('.img.nii.gz')]
 
     def __len__(self):
-        if self.mode == "train":
-            return len(self.train)
-        elif self.mode == "val":
-            return len(self.val)
-        elif self.mode == "test":
-            return len(self.test)
-        return self.meta["numTraining"]
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        #Obtaining image name by given index and the mode using meta data
-        if self.mode == "train":
-            name = self.train[idx]['image'].split('/')[-1]
-        elif self.mode == "val":
-            name = self.val[idx]['image'].split('/')[-1]
-        elif self.mode == "test":
-            name = self.test[idx]['image'].split('/')[-1]
-        else:
-            name = self.meta["training"][idx]['image'].split('/')[-1]
-        img_path = os.path.join(self.dir, "imagesTr", name)
-        label_path = os.path.join(self.dir, "labelsTr", name)
-        img_object = nib.load(img_path)
-        label_object = nib.load(label_path)
-        img_array = img_object.get_fdata()
-        #Converting to channel-first numpy array
-        img_array = np.moveaxis(img_array, -1, 0)
-        label_array = label_object.get_fdata()
-        label_array = np.moveaxis(label_array, -1, 0)
-        proccessed_out = {'name': name, 'image': img_array, 'label': label_array} 
-        if self.transform:
-            if self.mode == "train":
-                proccessed_out = self.transform[0](proccessed_out)
-            elif self.mode == "val":
-                proccessed_out = self.transform[1](proccessed_out)
-            elif self.mode == "test":
-                proccessed_out = self.transform[2](proccessed_out)
-            else:
-                proccessed_out = self.transform(proccessed_out)
+        # Get the filename
+        img_name = self.samples[idx]
+        label_name = img_name.replace('.img.nii.gz', '.label.nii.gz')
+
+        # Load image and label
+        img_path = os.path.join(self.cta_path, img_name)
+        label_path = os.path.join(self.annotation_path, label_name)
+
+        image = nib.load(img_path).get_fdata()
+        label = nib.load(label_path).get_fdata()
+        affine = nib.load(img_path).affine
+
+        # Convert to channel-first (C, D, H, W)
+        image = np.expand_dims(image, axis=0)
+        label = np.expand_dims(label, axis=0)
         
-        #The output numpy array is in channel-first format
-        return proccessed_out
+        # Normalize image to [0, 1]
+        min_val = image.min()
+        max_val = image.max()
 
+        if max_val != min_val:
+            image[image > max_val] = max_val
+            image[image < min_val] = min_val
+            image = (image - min_val) / (max_val - min_val)
+        else:
+            image = np.zeros_like(image)
 
+        # Scale to [-1, 1]
+        image = 2 * image - 1
 
-def get_train_val_test_Dataloaders(train_transforms, val_transforms, test_transforms):
-    """
-    The utility function to generate splitted train, validation and test dataloaders
+        # Apply transformations
+        if self.scenario == '2':
+            image, label = self.augment_image(image, label)
+            
+            image = image.copy()
+            label = label.copy()
+        return {'image': torch.tensor(image, dtype=torch.float32),
+                'label': torch.tensor(label, dtype=torch.long),
+                'affine': affine}
+
+    def augment_image(self, image, label):
+        """
+        Apply random augmentations to the image and label.
+
+        Args:
+            image (numpy array): The input image data (C, D, H, W).
+            label (numpy array): The corresponding label data (C, D, H, W).
+
+        Returns:
+            tuple: Augmented image and label.
+        """
+        # Random flip along each axis
+        if random.random() > 0.5:
+            image = np.flip(image, axis=1)  # Flip depth
+            label = np.flip(label, axis=1)
+        if random.random() > 0.5:
+            image = np.flip(image, axis=2)  # Flip height
+            label = np.flip(label, axis=2)
+        if random.random() > 0.5:
+            image = np.flip(image, axis=3)  # Flip width
+            label = np.flip(label, axis=3)
+
+        # Random rotation
+        if random.random() > 0.5:
+            # Rotate the image slightly (e.g., by ±10 degrees)
+            angle = random.uniform(-10, 10)
+            image = self.rotate_volume(image, angle)
+            label = self.rotate_volume(label, angle, is_label=True)
+
+        # Random intensity adjustment
+        if random.random() > 0.5:
+            factor = random.uniform(0.9, 1.1)
+            image *= factor
+
+        return image, label
+
+    def rotate_volume(self, volume, angle, is_label=False):
+        """
+        Rotate a 3D volume around the Z-axis.
+
+        Args:
+            volume (numpy array): The input volume (C, D, H, W).
+            angle (float): The angle to rotate by in degrees.
+            is_label (bool): Whether the volume is a label map (nearest neighbor interpolation).
+
+        Returns:
+            numpy array: The rotated volume.
+        """
+
+        # Use nearest neighbor interpolation for labels to avoid interpolation artifacts
+        order = 0 if is_label else 1
+        rotated = rotate(volume, angle, axes=(2, 3), reshape=False, order=order, mode='nearest')
+        return rotated
+
+def get_dataloaders(data_dir, resolution, train_batch_size=1, val_batch_size=1, test_batch_size=1, scenario='1'):
     
-    Note: all the configs to generate dataloaders in included in "config.py"
-    """
+    # Create datasets
+    train_dataset = MedicalImageDataset(data_dir=data_dir, mode='train', resolution=resolution, scenario=scenario)
+    val_dataset = MedicalImageDataset(data_dir=data_dir, mode='val', resolution=resolution, scenario=scenario)
+    test_dataset = MedicalImageDataset(data_dir=data_dir, mode='test', resolution=resolution, scenario=scenario)
 
-    dataset = MedicalSegmentationDecathlon(task_number=TASK_ID, dir_path=DATASET_PATH, split_ratios=TRAIN_VAL_TEST_SPLIT, transforms=[train_transforms, val_transforms, test_transforms])
+    # Create dataloaders
+    train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
 
-    #Spliting dataset and building their respective DataLoaders
-    train_set, val_set, test_set = copy.deepcopy(dataset), copy.deepcopy(dataset), copy.deepcopy(dataset)
-    train_set.set_mode('train')
-    val_set.set_mode('val')
-    test_set.set_mode('test')
-    train_dataloader = DataLoader(dataset= train_set, batch_size= TRAIN_BATCH_SIZE, shuffle= False)
-    val_dataloader = DataLoader(dataset= val_set, batch_size= VAL_BATCH_SIZE, shuffle= False)
-    test_dataloader = DataLoader(dataset= test_set, batch_size= TEST_BATCH_SIZE, shuffle= False)
-    
     return train_dataloader, val_dataloader, test_dataloader

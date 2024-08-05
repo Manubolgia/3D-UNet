@@ -5,7 +5,7 @@ Author: Amir Aghdam
 """
 
 from torch import nn
-from torchsummary import summary
+#from torchsummary import summary
 import torch
 import time
 
@@ -131,5 +131,5 @@ if __name__ == '__main__':
     #Configurations according to the Xenopus kidney dataset
     model = UNet3D(in_channels=3, num_classes=1)
     start_time = time.time()
-    summary(model=model, input_size=(3, 16, 128, 128), batch_size=-1, device="cpu")
+    #summary(model=model, input_size=(3, 16, 128, 128), batch_size=-1, device="cpu")
     print("--- %s seconds ---" % (time.time() - start_time))

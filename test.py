@@ -93,8 +93,8 @@ def main():
             all_iou.append(iou)
 
             # Save segmentation as NIfTI
-            output_dir = f'checkpoints/{args.resolution}_{args.scenario}/seg_results'
-            save_nifti(target_np[0], os.path.join(output_dir, f'segment_{i}.nii.gz'), affine)
+            output_dir = f'checkpoints/{args.resolution}_{args.scenario}'
+            save_nifti(target_np[0], os.path.join(output_dir, f'seg_results/segment_{i}.nii.gz'), affine)
 
     avg_loss = total_loss / len(test_dataloader)
     avg_precision = np.mean(all_precision)
@@ -115,6 +115,15 @@ def main():
     print(f'Recall: {avg_recall:.4f} ± {std_recall:.4f}')
     print(f'Dice Coefficient: {avg_dice:.4f} ± {std_dice:.4f}')
     print(f'Mean IoU: {avg_iou:.4f} ± {std_iou:.4f}')
+
+    # Save metrics to a text file
+    metrics_filepath = os.path.join(output_dir, 'metrics.txt')
+    with open(metrics_filepath, 'w') as file:
+        file.write(f'Test Loss: {avg_loss:.4f}\n')
+        file.write(f'Precision: {avg_precision:.4f} ± {std_precision:.4f}\n')
+        file.write(f'Recall: {avg_recall:.4f} ± {std_recall:.4f}\n')
+        file.write(f'Dice Coefficient: {avg_dice:.4f} ± {std_dice:.4f}\n')
+        file.write(f'Mean IoU: {avg_iou:.4f} ± {std_iou:.4f}\n')
 
 if __name__ == '__main__':
     main()

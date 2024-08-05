@@ -8,6 +8,7 @@ from dataset import get_dataloaders
 import csv
 from sklearn.metrics import precision_score, recall_score, f1_score, jaccard_score
 import numpy as np
+import logging
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train 3D U-Net for medical image segmentation")
@@ -36,16 +37,26 @@ def setup_dist():
         raise RuntimeError("CUDA is not available. A GPU is required for this setup.")
 
 def preprocess_input(data, num_classes):
-        # move to GPU and change data types
-        data = data.long()
+    # move to GPU and change data types
+    data = data.long()
 
-        # create one-hot label map
-        label_map = data
-        bs, _, d, h, w = label_map.size()
-        nc = num_classes
-        input_label = torch.FloatTensor(bs, nc, d, h, w).zero_()
-        input_semantics = input_label.scatter_(1, label_map, 1.0)     
-        return input_semantics
+    # create one-hot label map
+    label_map = data
+    bs, _, d, h, w = label_map.size()
+    nc = num_classes
+    input_label = torch.FloatTensor(bs, nc, d, h, w).zero_()
+    input_semantics = input_label.scatter_(1, label_map, 1.0)     
+    return input_semantics
+
+def setup_logging(log_file):
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
 
 def main():
     args = parse_args()
@@ -70,12 +81,17 @@ def main():
         criterion = criterion.cuda()
     optimizer = Adam(params=model.parameters())
 
+    results_dir = f'Results/{args.resolution}_{args.scenario}'
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    
+    log_file = os.path.join(results_dir, 'training.log')
+    setup_logging(log_file)
+
     min_valid_loss = float('inf')
     
     # CSV logging setup
-    if not os.path.exists(f'Results/{args.resolution}_{args.scenario}'):
-                os.makedirs(f'Results/{args.resolution}_{args.scenario}')
-    csv_file = f'Results/{args.resolution}_{args.scenario}/training_metrics.csv'
+    csv_file = os.path.join(results_dir, 'training_metrics.csv')
     if not os.path.exists(csv_file):
         with open(csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -83,11 +99,13 @@ def main():
                              'Validation Precision', 'Validation Recall', 
                              'Validation Dice', 'Validation IoU'])
 
-
     for epoch in range(args.training_epoch):
         train_loss = 0.0
         model.train()
-        for data in train_dataloader:
+
+        logging.info(f"Starting Epoch {epoch+1}")
+
+        for batch_idx, data in enumerate(train_dataloader):
             image, ground_truth, affine = data['image'], data['label'], data['affine']
             ground_truth = preprocess_input(ground_truth, args.num_classes)
             ground_truth = torch.argmax(ground_truth, dim=1)
@@ -103,11 +121,15 @@ def main():
 
             train_loss += loss.item()
 
+            if batch_idx % 10 == 0:  # Log every 10 batches
+                logging.info(f'Epoch {epoch+1}, Batch {batch_idx}, Loss: {loss.item()}')
+
         valid_loss = 0.0
         all_precision, all_recall, all_dice, all_iou = [], [], [], []
         model.eval()
+
         with torch.no_grad():
-            for data in val_dataloader:
+            for batch_idx, data in enumerate(val_dataloader):
                 image, ground_truth, affine = data['image'], data['label'], data['affine']
                 ground_truth = preprocess_input(ground_truth, args.num_classes)
                 ground_truth = torch.argmax(ground_truth, dim=1)
@@ -132,7 +154,10 @@ def main():
                 all_recall.append(recall)
                 all_dice.append(dice)
                 all_iou.append(iou)
-        
+
+                if batch_idx % 10 == 0:  # Log every 10 batches
+                    logging.info(f'Epoch {epoch+1}, Validation Batch {batch_idx}, Loss: {loss.item()}')
+
         avg_train_loss = train_loss / len(train_dataloader)
         avg_valid_loss = valid_loss / len(val_dataloader)
         avg_precision = np.mean(all_precision)
@@ -140,20 +165,23 @@ def main():
         avg_dice = np.mean(all_dice)
         avg_iou = np.mean(all_iou)
 
-        print(f'Epoch {epoch+1} \t\t Training Loss: {avg_train_loss} \t\t Validation Loss: {avg_valid_loss}')
-        print(f'Precision: {avg_precision:.4f}, Recall: {avg_recall:.4f}, Dice: {avg_dice:.4f}, IoU: {avg_iou:.4f}')
+        logging.info(f'Epoch {epoch+1} Completed')
+        logging.info(f'Training Loss: {avg_train_loss:.4f}')
+        logging.info(f'Validation Loss: {avg_valid_loss:.4f}')
+        logging.info(f'Precision: {avg_precision:.4f}, Recall: {avg_recall:.4f}, Dice: {avg_dice:.4f}, IoU: {avg_iou:.4f}')
         
         # Save metrics to CSV
         with open(csv_file, mode='a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([epoch+1, avg_train_loss, avg_valid_loss, avg_precision, avg_recall, avg_dice, avg_iou])
 
-        if min_valid_loss > valid_loss:
-            print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
-            min_valid_loss = valid_loss
-            if not os.path.exists(f'Results/{args.resolution}_{args.scenario}/checkpoints'):
-                os.makedirs(f'Results/{args.resolution}_{args.scenario}/checkpoints')
-            torch.save(model.state_dict(), f'Results/{args.resolution}_{args.scenario}/checkpoints/epoch{epoch}_valLoss{min_valid_loss:.6f}.pth')
+        if min_valid_loss > avg_valid_loss:
+            logging.info(f'Validation Loss Decreased({min_valid_loss:.6f}--->{avg_valid_loss:.6f}) \t Saving The Model')
+            min_valid_loss = avg_valid_loss
+            checkpoints_dir = os.path.join(results_dir, 'checkpoints')
+            if not os.path.exists(checkpoints_dir):
+                os.makedirs(checkpoints_dir)
+            torch.save(model.state_dict(), os.path.join(checkpoints_dir, f'epoch{epoch}_valLoss{min_valid_loss:.6f}.pth'))
 
 if __name__ == '__main__':
     main()
